@@ -1,0 +1,72 @@
+#! /usr/bin/bash 
+
+# MIT License
+
+# Copyright (c) 2022 EzPzDev
+
+# Permission is hereby granted, free of charge, to any person obtaining a copy
+# of this software and associated documentation files (the "Software"), to deal
+# in the Software without restriction, including without limitation the rights
+# to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+# copies of the Software, and to permit persons to whom the Software is
+# furnished to do so, subject to the following conditions:
+
+# The above copyright notice and this permission notice shall be included in all
+# copies or substantial portions of the Software.
+
+# THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+# IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+# FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+# AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+# LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+# OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+# SOFTWARE.
+
+# first variable is the path to file without a trailing /
+# second variable is file without any path that may have been included in command
+file=${@%/}
+deleteName=$(echo $file | sed "s/.*\///")
+# exit script if there are any weird / or the file doesn't exist
+if [[ $deleteName == */ ]] || [[ ! -e "$file" ]]; then
+  echo $'\n' "File is missing or has too many /"
+  exit 1
+else
+  # create extra needed variables now that we know file "should" be good to trash (echo command in size to remove tabs in output)
+  size=$(echo $(du -sb "$file"))
+  deletePath=$(realpath "$file")
+  deleteDate=$(date +"%Y-%m-%dT%H:%M:%S")
+# loop to add a (n) to the end of the file
+  if [[ -e ~/.local/share/Trash/info/"$deleteName".trashinfo ]]; then
+    ## echo $'\n' "ERROR! $deleteName Not Deleted!"
+    ## exit 1
+    i=1
+    while [[ -e ~/.local/share/Trash/info/"$deleteName ($i)".trashinfo ]]; do
+        let i++
+    done
+    deleteInfo=$deleteName\ \($i\)
+  else
+# if loop was not needed we still create this variable to use in place of deleteName for rest of script
+    deleteInfo=$deleteName
+  fi 
+# create the .trashinfo file
+  echo "[Trash Info]
+Path="$deletePath"
+DeletionDate="$deleteDate"" > ~/.local/share/Trash/info/"$deleteInfo".trashinfo
+# this next steps are needed if the file is a directory
+  if [[ -d $file ]]; then
+# we don't need a time variable if the file is not a directory. 64 bit(ie add nanoseconds) epoch time is needed for the directorysizes file
+    time=$(date -r /home/devin/.local/share/Trash/info/"$deleteInfo".trashinfo "+%s%3N")
+    echo "$size" >> ~/.local/share/Trash/directorysizes
+# two sed commands to format the data we just redirected to the directorysizes file
+    sed -i "$ s|$file|$time $deleteInfo|" ~/.local/share/Trash/directorysizes
+    sed -i '$ s/\s/%20/g3' ~/.local/share/Trash/directorysizes && sed -i "$ s/(.)/%28$i%29/" ~/.local/share/Trash/directorysizes
+  fi 
+# actually moving the file to the trash folder. No turning back now
+  mv "$file" ~/.local/share/Trash/files/"$deleteInfo"
+fi
+# trashpandas if everything executed correctly, no pandas if not
+if [[ $? -eq 0 ]]; then
+  echo $'\n' "  $delete Trashed!  "
+else
+  echo $'\n' "Error Occured, File(s) May Not Be Deleted!"
+fi
