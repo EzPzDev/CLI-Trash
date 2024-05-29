@@ -1,0 +1,20 @@
+#! /usr/bin/bash
+
+getHelp() {
+    $resources
+    cat << EOF
+
+Usage: $usage
+
+OPTIONS:
+
+    -h, --help                  Show this help.
+
+    $opts               $desc
+
+$misc
+
+
+
+EOF
+}

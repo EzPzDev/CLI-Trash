@@ -1,4 +1,4 @@
-#! /usr/bin/bash 
+#! /usr/bin/bash
 
 # MIT License
 
@@ -22,51 +22,189 @@
 # OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 # SOFTWARE.
 
+
+
 # first variable is the path to file without a trailing /
 # second variable is file without any path that may have been included in command
-file=${@%/}
-deleteName=$(echo $file | sed "s/.*\///")
-# exit script if there are any weird / or the file doesn't exist
-if [[ $deleteName == */ ]] || [[ ! -e "$file" ]]; then
-  echo $'\n' "File is missing or has too many /"
-  exit 1
-else
-  # create extra needed variables now that we know file "should" be good to trash (echo command in size to remove tabs in output)
-  size=$(echo $(du -sb "$file"))
-  deletePath=$(realpath "$file")
-  deleteDate=$(date +"%Y-%m-%dT%H:%M:%S")
-# loop to add a (n) to the end of the file
-  if [[ -e ~/.local/share/Trash/info/"$deleteName".trashinfo ]]; then
-    ## echo $'\n' "ERROR! $deleteName Not Deleted!"
-    ## exit 1
+DIR=${BASH_SOURCE[0]%/*}
+. "$DIR/resources/colors"
+. "$DIR/resources/help"
+usage="trash [option] [file/directory]"
+opts="-r, --restore"
+desc="[number] Restore a recently trashed file."
+file=${1%/}
+deleteName=${file##*/}
+workPath="$HOME/.local/share/Trash"
+
+# create extra needed variables now that we know file "should" be good to trash (echo command in size to remove tabs in output)
+variables () {
+    size=$(du -sb "$file" 2>/dev/null) || read -p 'Permission Denied! Elevate Privledges? [y/n] ' -n 1 -re answer
+    case $answer in
+        y) size=$(sudo du -sb "$file") ;;
+        n) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+        '\s'*) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+    esac
+    deletePath=$(realpath "$file")
+    deleteDate=$(date +"%Y-%m-%dT%H:%M:%S")
+}
+
+samename() {
+    # loop to add a (n) to the end of the file
     i=1
-    while [[ -e ~/.local/share/Trash/info/"$deleteName ($i)".trashinfo ]]; do
-        let i++
+    while [[ -e $workPath/info/"$deleteName ($i)".trashinfo ]]; do
+        (( i++ ))
     done
-    deleteInfo=$deleteName\ \($i\)
-  else
-# if loop was not needed we still create this variable to use in place of deleteName for rest of script
-    deleteInfo=$deleteName
-  fi 
-# create the .trashinfo file
-  echo "[Trash Info]
-Path="$deletePath"
-DeletionDate="$deleteDate"" > ~/.local/share/Trash/info/"$deleteInfo".trashinfo
-# this next steps are needed if the file is a directory
-  if [[ -d $file ]]; then
-# we don't need a time variable if the file is not a directory. 64 bit(ie add nanoseconds) epoch time is needed for the directorysizes file
-    time=$(date -r /home/devin/.local/share/Trash/info/"$deleteInfo".trashinfo "+%s%3N")
-    echo "$size" >> ~/.local/share/Trash/directorysizes
-# two sed commands to format the data we just redirected to the directorysizes file
-    sed -i "$ s|$file|$time $deleteInfo|" ~/.local/share/Trash/directorysizes
-    sed -i '$ s/\s/%20/g3' ~/.local/share/Trash/directorysizes && sed -i "$ s/(.)/%28$i%29/" ~/.local/share/Trash/directorysizes
-  fi 
-# actually moving the file to the trash folder. No turning back now
-  mv "$file" ~/.local/share/Trash/files/"$deleteInfo"
+    deleteInfo="$deleteName ($i)"
+}
+
+
+directory() {
+
+    # we don't need a time variable if the file is not a directory. 64 bit(ie add nanoseconds) epoch time is needed for the directorysizes file
+    time=$(date -r "$workPath/info/$deleteInfo.trashinfo" '+%s%3N')
+    echo "$size" >> "$workPath/directorysizes"
+
+    # two sed commands to format the data we just redirected to the directorysizes file
+    sed -i "$ s/\s*$file/ $time $deleteInfo/" "$workPath/directorysizes"
+    sed -i '$ s/\s/%20/g3' "$workPath/directorysizes" && sed -i '$ s/(\([0-9]*\))/%28\1%29/g1' "$workPath/directorysizes"
+}
+
+
+move() {
+
+    # actually moving the file to the trash folder. No turning back now
+    updatedGnu=$(mv --help | grep -o ' --no-copy')
+    mv $updatedGnu "$file" "$workPath/files/$deleteInfo" 2> /dev/null || if [[ -z "$REPLY" ]]; then
+        read -p 'Permission Denied! Elevate Privledges? [y/n] ' -n 1 -re answer
+        case $answer in
+            y) sudo mv "$file" "$workPath/files/$deleteInfo"; sudo chown "$LOGNAME:$LOGNAME" "$workPath/files/$deleteInfo" ;;
+            n) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+            '\s'*) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+        esac
+    else
+        sudo mv "$file" "$workPath/files/$deleteInfo" && sudo chown "$LOGNAME:$LOGNAME" "$workPath/files/$deleteInfo"
+    fi
+}
+
+
+restore() {
+
+    foundFile=$selected
+    parentOwner=$(stat -c '%U' .)
+    trimFile=$(echo "$foundFile" | sed 's/\ (.*)//')
+
+    if [[ -e ./$trimFile ]]; then
+        i=1
+        while [[ -e ./"$trimFile ($i)" ]]; do
+            (( i++ ))
+        done
+        finalFile="$trimFile ($i)"
+    else
+        finalFile=$trimFile
+    fi
+    if [[ $parentOwner == "$LOGNAME" ]]; then
+        mv "$workPath/files/$foundFile" "./$finalFile"
+    else
+        read -p "Restoring To Directory Not Owned By You, sudo? [y/n] " -n 1 -re REPLY
+        case $REPLY in
+            y) sudo mv "$workPath/files/$foundFile" "./$finalFile";
+                sudo chown "$parentOwner:$parentOwner" ./"$finalFile" ;;
+            n) echo -e "$RED$finalFile Not Restored!$NC"; exit 1 ;;
+            '\s'*) echo -e "$RED$finalFile Not Restored!$NC" ;;
+        esac
+    fi
+    rm "$workPath/info/$foundFile.trashinfo"
+    [[ -d $1./$finalFile ]] && sed -i "/$foundFile/d" "$workPath/directorysizes"
+
+    good="'$finalFile' ${GREEN}Restored!$NC"
+    bad="${RED}File not Restored!$NC"
+    endScript
+}
+
+
+selection () {
+    IFS=$'\n'
+    echo "Last 5 Items Trashed: "
+    PS3="Select Number To Restore: "
+
+    items=($(find $HOME/.local/share/Trash/files/ -maxdepth 1 -mindepth 1  -printf '%C@ %P\n' | sort -r | sed 's/^\S* //'))
+
+    while true; do
+        select item in "${items[@]:0:5}" Quit
+        do
+            case $REPLY in
+                6) echo -e "\nExiting!"; exit 0 ;;
+                q*) echo -e "\nExiting!"; exit 0 ;;
+                e*) echo -e "\nExiting!"; exit 0 ;;
+                [1-5]) selected=$item; echo -e "\n${GREEN}Restoring $item!$NC"; break 2 ;;
+                ?) selected=${items[0]}; echo -e "\n$RED$REPLY Not Found,$NC Restoring Last Trashed Item! (${items[0]})"; break 2 ;;
+            esac
+        done
+    done
+}
+
+
+endScript () {
+
+    # trashpandas if everything executed correctly, no pandas if not
+    if [[ $? == 0 ]]; then
+        echo -e $'\n'"$good"
+    else
+        echo -e $'\n'"$bad"
+    fi
+    exit
+}
+
+
+# exit script if there are any weird / or the file doesn't exist
+if [[ $deleteName == */ ]]; then
+    echo -e $'\n' "${RED}File has too many /$NC"
+    exit 1
 fi
-# trashpandas if everything executed correctly, no pandas if not
-if [[ $? -eq 0 ]]; then
-  echo $'\n' "  $delete Trashed!  "
+
+options=$(getopt -n "trash" -l "restore,help," -o "hr" -- "$@")
+
+[[ -z "$1" ]] && echo "'${0##*/}' Needs an Option!" && exit 1
+
+eval set -- "$options"
+
+while :; do
+    case $1 in
+        -r | --restore) selection; restore "$2"; exit 0 ;;
+        -h | --help) getHelp; exit 0 ;;
+        -- ) shift; break ;;
+        *) echo "$1 Is Not An Option!"; exit 1 ;;
+    esac
+    shift
+done
+
+if [[ -e "$file" ]]; then
+    # create directories if they do not exist
+    if [[ ! -e $workPath/files ]]; then
+        mkdir -p "$workPath/files" "$workPath/info"
+    fi
+    if [[ -e $workPath/info/"$deleteName".trashinfo ]]; then
+        samename
+    else
+        # if loop was not needed we still create this variable to use in place of deleteName for rest of script
+        deleteInfo="$deleteName"
+    fi
+    # actually moving the file to the trash folder. No turning back now
+    variables "$@"
+    move
+    # create the .trashinfo file
+    echo "[Trash Info]
+Path=$deletePath
+DeletionDate=$deleteDate
+    " > "$workPath/info/$deleteInfo.trashinfo"
+    # this next steps are needed if the file is a directory
+    if [[ -d "$workPath/files/$deleteInfo" ]]; then
+        directory
+    fi
 else
-  echo $'\n' "Error Occured, File(s) May Not Be Deleted!"
+    [[ ! -e "$file" ]] && echo -e $'\n' "$RED$file is missing!$NC"
+    exit 1
 fi
+good="$GREEN $NC '$deleteName' Trashed! $GREEN $NC"
+bad="${RED}Error$NC Occured, File(s) May Not Be Deleted!"
+endScript
