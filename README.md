@@ -3,15 +3,18 @@ A simple barebones cli command to trash a file or directory that *mostly* follow
 
 <sub> By "mostly" it doesn't create a `$topdir/.Trash` directory or recognize seperate filesystems. So using it while in something like a NAS directory or flash drive will always move the trashed file/directory into your $home drive (`~/.local/share/Trash/`)
 
-<sub> Only tested on OpenSUSE.
+<sub> Tested on OpenSUSE and Debian.
 
 ## Install
-Download zip and copy trash to a `$PATH` directory or,
+Download zip and copy trash & resources to a `$PATH` directory or,
 
 enter this command into your terminal:
 
 ```
-curl -sSL "https://github.com/EzPzDev/Super-Simple-Trash-Command/raw/main/trash" -o ~/bin/trash
+curl -sSL "https://github.com/EzPzDev/Super-Simple-Trash-Command/raw/main/trash" --create-dirs -o ~/bin/trash
+curl -sSL "https://github.com/EzPzDev/Super-Simple-Trash-Command/raw/main/resources/colors" --create-dirs -o ~/bin/resources/colors
+curl -sSL "https://github.com/EzPzDev/Super-Simple-Trash-Command/raw/main/resources/help" --create-dirs -o ~/bin/resources/help
+
 chmod +x ~/bin/trash
 ```
 Add `~/bin` to your `$PATH` if it isn't already:
@@ -21,10 +24,9 @@ export PATH=$PATH:~/bin
 
 ## Usage
 To use, simply type "trash [file/directory you want to trash]" into your terminal.
-
 ```
-trash [file/directory to trash]
+trash [option] [file/directory]
 ```
 
 ## Uninstall
-Delete the file `trash` from `~/bin/` or wherever you copied it to.
+Delete the file `trash` and `resources` from `~/bin/` or wherever you copied it to.
