@@ -1,0 +1,11 @@
+RED=$(tput setaf 1)
+BLUE=$(tput setaf 4)
+BBLUE=$(tput setaf 14)
+GREEN=$(tput setaf 2)
+ORANGE=$(tput setaf 208)
+CYAN=$(tput setaf 6)
+# No Color
+NC=$(tput sgr0)
+BLINKR=$(tput blink)
+# DIR=$${BASH_SOURCE[0]%/*}
+#. "$DIR/resources/colors"

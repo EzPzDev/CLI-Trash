@@ -24,32 +24,35 @@
 
 
 
-# first variable is the path to file without a trailing /
-# second variable is file without any path that may have been included in command
+# Need to update comments!!
+
 DIR=${BASH_SOURCE[0]%/*}
-. "$DIR/resources/colors"
+. "$DIR/resources/tput-colors"
 . "$DIR/resources/help"
 usage="trash [option] [file/directory]"
 opts="-r, --restore"
 desc="[number] Restore a recently trashed file."
+# the path to file without a trailing /
 file=${1%/}
+# file without any path that may have been included in command
 deleteName=${file##*/}
 workPath="$HOME/.local/share/Trash"
 
-# create extra needed variables now that we know file "should" be good to trash (echo command in size to remove tabs in output)
+# create extra needed variables
 variables () {
+    # first permission check. if du does not work, we likely do not have permission to do anything. this may not be necessary
     size=$(du -sb "$file" 2>/dev/null) || read -p 'Permission Denied! Elevate Privledges? [y/n] ' -n 1 -re answer
     case $answer in
         y) size=$(sudo du -sb "$file") ;;
-        n) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
-        '\s'*) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+        n) printf "%s\n" "${RED}File Not Trashed!$NC"; exit 1 ;;
+        '\s'*) printf "%s\n" "${RED}File Not Trashed!$NC"; exit 1 ;;
     esac
     deletePath=$(realpath "$file")
     deleteDate=$(date +"%Y-%m-%dT%H:%M:%S")
 }
 
-samename() {
-    # loop to add a (n) to the end of the file
+# loop to add a (n) to the end of the file
+sameName() {
     i=1
     while [[ -e $workPath/info/"$deleteName ($i)".trashinfo ]]; do
         (( i++ ))
@@ -57,7 +60,7 @@ samename() {
     deleteInfo="$deleteName ($i)"
 }
 
-
+# function to call if target is a directory
 directory() {
 
     # we don't need a time variable if the file is not a directory. 64 bit(ie add nanoseconds) epoch time is needed for the directorysizes file
@@ -70,16 +73,17 @@ directory() {
 }
 
 
+# function to move target to trash folder
 move() {
 
-    # actually moving the file to the trash folder. No turning back now
+    # needed if the mv command is a recent version
     updatedGnu=$(mv --help | grep -o ' --no-copy')
     mv $updatedGnu "$file" "$workPath/files/$deleteInfo" 2> /dev/null || if [[ -z "$REPLY" ]]; then
         read -p 'Permission Denied! Elevate Privledges? [y/n] ' -n 1 -re answer
         case $answer in
             y) sudo mv "$file" "$workPath/files/$deleteInfo"; sudo chown "$LOGNAME:$LOGNAME" "$workPath/files/$deleteInfo" ;;
-            n) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
-            '\s'*) echo -e "${RED}File Not Trashed!$NC"; exit 1 ;;
+            n) printf "%s\n" "${RED}File Not Trashed!$NC"; exit 1 ;;
+            '\s'*) printf "%s\n" "${RED}File Not Trashed!$NC"; exit 1 ;;
         esac
     else
         sudo mv "$file" "$workPath/files/$deleteInfo" && sudo chown "$LOGNAME:$LOGNAME" "$workPath/files/$deleteInfo"
@@ -87,11 +91,12 @@ move() {
 }
 
 
+# function to restore a recently trashed file/dir
 restore() {
 
     foundFile=$selected
     parentOwner=$(stat -c '%U' .)
-    trimFile=$(echo "$foundFile" | sed 's/\ (.*)//')
+    trimFile=$(printf "$foundFile" | sed 's/\ (.*)//')
 
     if [[ -e ./$trimFile ]]; then
         i=1
@@ -109,8 +114,8 @@ restore() {
         case $REPLY in
             y) sudo mv "$workPath/files/$foundFile" "./$finalFile";
                 sudo chown "$parentOwner:$parentOwner" ./"$finalFile" ;;
-            n) echo -e "$RED$finalFile Not Restored!$NC"; exit 1 ;;
-            '\s'*) echo -e "$RED$finalFile Not Restored!$NC" ;;
+            n) printf "%s\n" "${RED}$finalFile Not Restored!$NC"; exit 1 ;;
+            '\s'*) printf "%s\n" "$RED$finalFile Not Restored!$NC" ;;
         esac
     fi
     rm "$workPath/info/$foundFile.trashinfo"
@@ -124,7 +129,7 @@ restore() {
 
 selection () {
     IFS=$'\n'
-    echo "Last 5 Items Trashed: "
+    printf "%s\n" "Last 5 Items Trashed:"
     PS3="Select Number To Restore: "
 
     items=($(find $HOME/.local/share/Trash/files/ -maxdepth 1 -mindepth 1  -printf '%C@ %P\n' | sort -r | sed 's/^\S* //'))
@@ -133,11 +138,11 @@ selection () {
         select item in "${items[@]:0:5}" Quit
         do
             case $REPLY in
-                6) echo -e "\nExiting!"; exit 0 ;;
-                q*) echo -e "\nExiting!"; exit 0 ;;
-                e*) echo -e "\nExiting!"; exit 0 ;;
-                [1-5]) selected=$item; echo -e "\n${GREEN}Restoring $item!$NC"; break 2 ;;
-                ?) selected=${items[0]}; echo -e "\n$RED$REPLY Not Found,$NC Restoring Last Trashed Item! (${items[0]})"; break 2 ;;
+                6) printf "\n%s\n" "Exiting!"; exit 0 ;;
+                q*) printf "\n%s\n" "Exiting!"; exit 0 ;;
+                e*) printf "\n%s\n" "Exiting!"; exit 0 ;;
+                [1-5]) selected=$item; printf "\n%s\n" "${GREEN}Restoring $item!$NC"; break 2 ;;
+                ?) selected=${items[0]}; printf "\n%s\n" "$RED$REPLY Not Found,$NC Restoring Last Trashed Item! (${items[0]})"; break 2 ;;
             esac
         done
     done
@@ -148,9 +153,9 @@ endScript () {
 
     # trashpandas if everything executed correctly, no pandas if not
     if [[ $? == 0 ]]; then
-        echo -e $'\n'"$good"
+        printf "\n%s\n" "$good"
     else
-        echo -e $'\n'"$bad"
+        printf "\n%s\n" "$bad"
     fi
     exit
 }
@@ -158,13 +163,13 @@ endScript () {
 
 # exit script if there are any weird / or the file doesn't exist
 if [[ $deleteName == */ ]]; then
-    echo -e $'\n' "${RED}File has too many /$NC"
+    printf "%s\n" "${RED}File has too many /$NC"
     exit 1
 fi
 
 options=$(getopt -n "trash" -l "restore,help," -o "hr" -- "$@")
 
-[[ -z "$1" ]] && echo "'${0##*/}' Needs an Option!" && exit 1
+[[ -z "$1" ]] && printf "%s\n" "'${0##*/}' Needs an Option!" && exit 1
 
 eval set -- "$options"
 
@@ -173,7 +178,7 @@ while :; do
         -r | --restore) selection; restore "$2"; exit 0 ;;
         -h | --help) getHelp; exit 0 ;;
         -- ) shift; break ;;
-        *) echo "$1 Is Not An Option!"; exit 1 ;;
+        *) print "%s\n" "$1 Is Not An Option!"; exit 1 ;;
     esac
     shift
 done
@@ -183,13 +188,14 @@ if [[ -e "$file" ]]; then
     if [[ ! -e $workPath/files ]]; then
         mkdir -p "$workPath/files" "$workPath/info"
     fi
+    # if target has the same name as a file/dir in trash call sameName
     if [[ -e $workPath/info/"$deleteName".trashinfo ]]; then
-        samename
+        sameName
     else
         # if loop was not needed we still create this variable to use in place of deleteName for rest of script
         deleteInfo="$deleteName"
     fi
-    # actually moving the file to the trash folder. No turning back now
+    # actually moving the file to the trash folder.
     variables "$@"
     move
     # create the .trashinfo file
@@ -202,7 +208,7 @@ DeletionDate=$deleteDate
         directory
     fi
 else
-    [[ ! -e "$file" ]] && echo -e $'\n' "$RED$file is missing!$NC"
+    [[ ! -e "$file" ]] && printf "\n%s\n" "$RED$file is missing!$NC"
     exit 1
 fi
 good="$GREEN $NC '$deleteName' Trashed! $GREEN $NC"
